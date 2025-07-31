@@ -3,34 +3,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Howl } from "howler";
 import "./App.css";
 
-// ===================================================================================
-// 1. CONSTANTS & CONFIGURATION
-// ===================================================================================
+import {
+  GAME_DURATION,
+  INITIAL_SPAWN_RATE,
+  MIN_SPAWN_RATE,
+  SPAWN_RATE_ACCELERATION,
+  GAME_ITEMS,
+  POINTS,
+} from "./constants";
 
-const GAME_DURATION = 60;
-const INITIAL_SPAWN_RATE = 2000;
-const MIN_SPAWN_RATE = 400;
-const SPAWN_RATE_ACCELERATION = 10;
-
-const GAME_ITEMS = [
-  { id: "salary", category: "income", emoji: "💰", label: "Salary" },
-  { id: "bonus", category: "income", emoji: "🎁", label: "Bonus" },
-  { id: "investment", category: "income", emoji: "📈", label: "Investment" },
-  { id: "freelance", category: "income", emoji: "💻", label: "Freelance" },
-  { id: "food", category: "expense", emoji: "🍕", label: "Food" },
-  { id: "hotel", category: "expense", emoji: "🏨", label: "Hotel" },
-  { id: "shopping", category: "expense", emoji: "🛍️", label: "Shopping" },
-  { id: "gas", category: "expense", emoji: "⛽", label: "Gas" },
-  { id: "bills", category: "expense", emoji: "📱", label: "Bills" },
-];
-
-const POINTS = {
-  CORRECT: 10,
-  INCORRECT: -5,
-  MISSED: -2,
-};
-
-// Sound setup with error handling
 const createSound = (src) => {
   try {
     return new Howl({ src: [src], volume: 0.3 });
@@ -46,29 +27,22 @@ const sounds = {
   gameOver: createSound("/sounds/gameOver.wav"),
 };
 
-// ===================================================================================
-// 2. CUSTOM HOOK: useGameLogic
-// ===================================================================================
-
 const useGameLogic = () => {
-  const [gameState, setGameState] = useState("idle");
+  const [gameState, setGameState] = useState("idle"); // idle | playing | gameOver
   const [bubbles, setBubbles] = useState([]);
   const [score, setScore] = useState({ income: 0, expense: 0 });
   const [timer, setTimer] = useState(GAME_DURATION);
   const spawnRate = useRef(INITIAL_SPAWN_RATE);
   const bubbleIdCounter = useRef(0);
 
-  // **FIX: Use refs to avoid stale closure issues**
   const gameStateRef = useRef("idle");
   const gameTimerRef = useRef(null);
   const bubbleSpawnerRef = useRef(null);
 
-  // Update ref whenever state changes
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
 
-  // Cleanup effect
   useEffect(() => {
     return () => {
       if (gameTimerRef.current) clearInterval(gameTimerRef.current);
@@ -76,36 +50,26 @@ const useGameLogic = () => {
     };
   }, []);
 
-  // **FIX: Remove gameState dependency and use ref instead**
   const spawnBubble = useCallback(() => {
     if (gameStateRef.current !== "playing") {
-      console.log("❌ Not spawning - game not playing, current state:", gameStateRef.current);
       return;
     }
 
     const randomItem = GAME_ITEMS[Math.floor(Math.random() * GAME_ITEMS.length)];
-    const newBubble = { 
-      ...randomItem, 
-      id: `bubble-${++bubbleIdCounter.current}-${Date.now()}`
+    const newBubble = {
+      ...randomItem,
+      id: `bubble-${++bubbleIdCounter.current}-${Date.now()}`,
     };
-    
-    console.log("✅ Spawned:", newBubble.label, newBubble.id);
-    setBubbles((prev) => {
-      const newBubbles = [...prev, newBubble];
-      console.log("📊 Total bubbles:", newBubbles.length);
-      return newBubbles;
-    });
+
+    setBubbles((prev) => [...prev, newBubble]);
 
     spawnRate.current = Math.max(
       MIN_SPAWN_RATE,
       spawnRate.current - SPAWN_RATE_ACCELERATION
     );
-  }, []); // **FIX: Empty dependency array**
+  }, []);
 
   const startGame = useCallback(() => {
-    console.log("🚀 Starting game...");
-    
-    // Clear any existing timers
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
     if (bubbleSpawnerRef.current) clearTimeout(bubbleSpawnerRef.current);
 
@@ -116,7 +80,6 @@ const useGameLogic = () => {
     spawnRate.current = INITIAL_SPAWN_RATE;
     bubbleIdCounter.current = 0;
 
-    // Start game timer
     gameTimerRef.current = setInterval(() => {
       setTimer((prev) => {
         if (prev <= 1) {
@@ -128,25 +91,18 @@ const useGameLogic = () => {
       });
     }, 1000);
 
-    // **FIX: Start spawning immediately and use ref for state checking**
     const spawnLoop = () => {
-      console.log("🫧 Spawning bubble..., current game state:", gameStateRef.current);
       spawnBubble();
       if (gameStateRef.current === "playing") {
         bubbleSpawnerRef.current = setTimeout(spawnLoop, spawnRate.current);
       }
     };
-    
-    // Start spawning after a small delay to ensure state is updated
-    setTimeout(() => {
-      console.log("🎮 Starting spawn loop, game state:", gameStateRef.current);
-      spawnLoop();
-    }, 100);
+
+    setTimeout(spawnLoop, 100);
   }, [spawnBubble]);
 
   useEffect(() => {
     if (timer <= 0 && gameState === "playing") {
-      console.log("⏰ Game over!");
       setGameState("gameOver");
       sounds.gameOver.play();
       clearInterval(gameTimerRef.current);
@@ -156,7 +112,6 @@ const useGameLogic = () => {
   }, [timer, gameState]);
 
   const handleDrop = useCallback((item, binType) => {
-    console.log(`🎯 Dropped ${item.label} in ${binType} bin`);
     setBubbles((prev) => prev.filter((b) => b.id !== item.id));
 
     if (item.category === binType) {
@@ -175,7 +130,6 @@ const useGameLogic = () => {
   }, []);
 
   const handleMiss = useCallback((item) => {
-    console.log(`💔 Missed: ${item.label}`);
     setBubbles((prev) => prev.filter((b) => b.id !== item.id));
     setScore((prev) => ({
       ...prev,
@@ -194,25 +148,12 @@ const useGameLogic = () => {
   };
 };
 
-// ===================================================================================
-// 3. COMPONENTS
-// ===================================================================================
-
-function Bubble({
-  item,
-  onDrop,
-  onMiss,
-  canvasRef,
-  incomeBinRef,
-  expenseBinRef,
-}) {
+function Bubble({ item, onDrop, onMiss, canvasRef, incomeBinRef, expenseBinRef }) {
   const [isDragging, setIsDragging] = useState(false);
 
   const canvasWidth = canvasRef.current?.clientWidth || 800;
   const canvasHeight = canvasRef.current?.clientHeight || 600;
-  const fallDuration = 8; // Faster falling
-
-  console.log(`🫧 Bubble ${item.label} created - Canvas: ${canvasWidth}x${canvasHeight}`);
+  const fallDuration = 8;
 
   const handleDragEnd = (event, info) => {
     setIsDragging(false);
@@ -222,7 +163,6 @@ function Bubble({
     const dropY = info.point.y;
     let droppedBin = null;
 
-    // Check bins
     const incomeRect = incomeBinRef.current?.getBoundingClientRect();
     if (
       incomeRect &&
@@ -258,13 +198,9 @@ function Bubble({
       drag
       dragMomentum={false}
       dragElastic={0.2}
-      onDragStart={() => {
-        console.log(`🖱️ Started dragging ${item.label}`);
-        setIsDragging(true);
-      }}
+      onDragStart={() => setIsDragging(true)}
       onDragEnd={handleDragEnd}
       onAnimationComplete={() => {
-        console.log(`⬇️ ${item.label} finished falling`);
         if (!isDragging) {
           onMiss(item);
         }
@@ -273,22 +209,22 @@ function Bubble({
         y: -120,
         x: Math.random() * Math.max(0, canvasWidth - 80),
         opacity: 0,
-        scale: 0.8
+        scale: 0.8,
       }}
       animate={{
         y: canvasHeight + 120,
         opacity: 1,
-        scale: 1
+        scale: 1,
       }}
       exit={{
         opacity: 0,
         scale: 0.3,
-        transition: { duration: 0.3 }
+        transition: { duration: 0.3 },
       }}
       transition={{
         y: { duration: fallDuration, ease: "linear", type: "tween" },
         opacity: { duration: 0.5 },
-        scale: { duration: 0.5 }
+        scale: { duration: 0.5 },
       }}
       className={`absolute w-20 h-20 bg-white/95 rounded-full shadow-xl flex flex-col items-center justify-center cursor-grab border-3 ${
         item.category === "income" ? "border-green-500" : "border-red-500"
@@ -347,132 +283,147 @@ function Bin({ type, score, binRef }) {
   );
 }
 
-function GameOverlay({ gameState, startGame, score }) {
-  if (gameState === "playing") return null;
-  const isGameOver = gameState === "gameOver";
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-white"
-    >
-      {isGameOver && (
-        <motion.div
-          className="text-center mb-8"
-          initial={{ scale: 0.5, y: 50 }}
-          animate={{ scale: 1, y: 0 }}
-          transition={{ duration: 0.5, type: "spring" }}
-        >
-          <h2 className="text-5xl md:text-6xl font-extrabold text-white drop-shadow-lg mb-4">
-            Game Over!
-          </h2>
-          <p className="text-xl md:text-2xl mb-2">Final Score:</p>
-          <p className="text-6xl md:text-7xl font-bold text-yellow-300 drop-shadow-lg">
-            {score}
-          </p>
-        </motion.div>
-      )}
-      <motion.button
-        onClick={startGame}
-        className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-4 px-10 rounded-full text-2xl shadow-2xl"
-        whileHover={{ scale: 1.1, y: -5 }}
-        whileTap={{ scale: 0.95 }}
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: isGameOver ? 0.5 : 0, duration: 0.3 }}
-      >
-        {isGameOver ? "🚀 Play Again" : "🚀 Start Game"}
-      </motion.button>
-    </motion.div>
-  );
-}
-
-// ===================================================================================
-// 4. MAIN APP COMPONENT
-// ===================================================================================
-
 function App() {
   const canvasRef = useRef(null);
   const incomeBinRef = useRef(null);
   const expenseBinRef = useRef(null);
 
-  const {
-    gameState,
-    score,
-    bubbles,
-    timer,
-    startGame,
-    handleDrop,
-    handleMiss,
-  } = useGameLogic();
+  const { gameState, score, bubbles, timer, startGame, handleDrop, handleMiss } =
+    useGameLogic();
 
   const totalScore = score.income + score.expense;
 
-  // Debug canvas dimensions
-  useEffect(() => {
-    if (canvasRef.current) {
-      console.log("📏 Canvas dimensions:", {
-        width: canvasRef.current.clientWidth,
-        height: canvasRef.current.clientHeight,
-        gameState,
-        bubblesCount: bubbles.length
-      });
-    }
-  }, [gameState, bubbles.length]);
-
   return (
-    <div className="flex flex-col h-screen w-full bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 text-slate-800 items-center justify-center font-sans overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-[#F7F5F1] text-slate-800 items-center justify-center font-sans overflow-hidden">
       <div className="text-center mb-6 px-4">
-        <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent mb-2 drop-shadow-lg">
-          💰 Financial Catch 💸
+        <h1 className="text-4xl md:text-5xl font-bold text-black mb-2">
+          Catch the items!
         </h1>
-        <p className="text-white text-lg md:text-xl font-medium drop-shadow-md max-w-2xl">
-          Drag income items to the <span className="text-green-300 font-bold">green bin</span> and expenses to the <span className="text-red-300 font-bold">red bin</span>!
+        <p className="text-gray-600 text-base md:text-lg max-w-2xl">
+          The Computer Society Of India is a non-profit professional body that
+          meets to exchange views and information to learn and share ideas.
+          Being a national level committee, we work together to discuss
+          technology with like-minded people.
         </p>
       </div>
 
       <div
         ref={canvasRef}
-        className="canvas h-[70vh] rounded-3xl w-[95vw] md:w-[85vw] max-w-5xl bg-gradient-to-b from-sky-300 to-sky-500 relative overflow-hidden border-4 border-white shadow-2xl"
-        style={{ minHeight: '400px' }}
+        className="canvas h-[70vh] rounded-3xl w-[95vw] md:w-[85vw] max-w-5xl bg-white relative overflow-hidden border-4 border-sky-300 shadow-lg flex items-center justify-center"
+        style={{ minHeight: "600px" }}
       >
         <AnimatePresence mode="popLayout">
-          {gameState === "playing" &&
-            bubbles.map((bubble) => (
-              <Bubble
-                key={bubble.id}
-                item={bubble}
-                onDrop={handleDrop}
-                onMiss={handleMiss}
-                canvasRef={canvasRef}
-                incomeBinRef={incomeBinRef}
-                expenseBinRef={expenseBinRef}
-              />
-            ))}
+          {gameState === "idle" && (
+            <motion.div
+              key="start"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="flex flex-col items-center justify-center"
+            >
+              <button
+                onClick={startGame}
+                className="bg-green-500 text-white font-bold py-4 px-10 rounded-lg text-2xl shadow-lg hover:bg-green-600 transition-colors duration-300"
+              >
+                Start Playing
+              </button>
+            </motion.div>
+          )}
+
+          {gameState === "playing" && (
+            <>
+              <div className="absolute top-4 left-4 right-4 bg-gray-100 rounded-full p-2 flex items-center justify-between shadow-inner">
+                <div className="flex items-center gap-8 ml-4">
+                  <span className="font-bold text-lg">Score: {totalScore}</span>
+                  <span className="font-bold text-lg">Time left: {timer}s</span>
+                  <span className="font-bold text-lg">Lives: ♥♥♥</span>
+                </div>
+                <div className="w-1/2 h-4 bg-gray-300 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500"
+                    style={{ width: `${(timer / GAME_DURATION) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+              {bubbles.map((bubble) => (
+                <Bubble
+                  key={bubble.id}
+                  item={bubble}
+                  onDrop={handleDrop}
+                  onMiss={handleMiss}
+                  canvasRef={canvasRef}
+                  incomeBinRef={incomeBinRef}
+                  expenseBinRef={expenseBinRef}
+                />
+              ))}
+              <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-around items-end">
+                <Bin type="income" score={score.income} binRef={incomeBinRef} />
+                <Bin type="expense" score={score.expense} binRef={expenseBinRef} />
+              </div>
+            </>
+          )}
+
+          {gameState === "gameOver" && (
+            <motion.div
+              key="gameOver"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 text-white p-6 rounded-2xl mx-auto max-w-3xl"
+            >
+              <motion.h1
+                className="mb-8 text-5xl md:text-6xl font-extrabold text-white drop-shadow-lg"
+                initial={{ scale: 0.5, y: 50 }}
+                animate={{ scale: 1, y: 0 }}
+                transition={{ duration: 0.5, type: "spring" }}
+              >
+                Game Over!
+              </motion.h1>
+
+              <div className="flex justify-evenly w-full mb-10">
+                <div className="flex flex-col items-center">
+                  <span className="text-4xl text-yellow-300 mb-2">🏆</span>
+                  <div className="text-lg text-gray-200 mb-1">Final Score:</div>
+                  <div className="font-bold text-5xl">{totalScore}</div>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-4xl text-yellow-300 mb-2">⏱️</span>
+                  <div className="text-lg text-gray-200 mb-1">Time Taken:</div>
+                  <div className="font-bold text-5xl">{GAME_DURATION - timer}s</div>
+                </div>
+              </div>
+
+              <div className="mx-auto bg-blue-50 rounded-xl w-2/5 p-6 mb-10 shadow-lg">
+                <div className="text-sm mb-1 text-gray-700 text-center">Your level</div>
+                <div className="text-6xl text-green-700 font-bold text-center">
+                  {Math.floor(totalScore / 50) + 1}
+                </div>
+                <div className="text-gray-500 font-semibold text-sm text-center">
+                  Amateur
+                </div>
+              </div>
+
+              <div className="italic text-gray-300 mb-12 text-lg text-center">
+                Keep Trying!
+              </div>
+
+              <div className="flex gap-6 w-full justify-center px-6 max-w-md">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex-1 py-4 rounded-lg border border-gray-300 bg-white cursor-pointer text-base font-medium text-gray-900 hover:bg-gray-100 transition"
+                >
+                  ← Go Back
+                </button>
+                <button
+                  onClick={startGame}
+                  className="flex-1 py-4 rounded-lg border-0 bg-green-600 text-white text-base font-semibold cursor-pointer hover:bg-green-700 transition"
+                >
+                  Play Again
+                </button>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
-
-        <GameOverlay
-          gameState={gameState}
-          startGame={startGame}
-          score={totalScore}
-        />
-
-        {gameState !== "idle" && (
-          <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-between items-end">
-            <Bin type="income" score={score.income} binRef={incomeBinRef} />
-            <div className="text-center text-white pb-8">
-              <div className="text-4xl font-bold drop-shadow-lg mb-2">
-                {timer}s
-              </div>
-              <div className="text-2xl font-bold drop-shadow-lg">
-                Score: {totalScore}
-              </div>
-            </div>
-            <Bin type="expense" score={score.expense} binRef={expenseBinRef} />
-          </div>
-        )}
       </div>
     </div>
   );

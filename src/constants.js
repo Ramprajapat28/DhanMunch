@@ -1,5 +1,3 @@
-// src/constants.js
-
 export const GAME_DURATION = 60; // Game duration in seconds
 export const INITIAL_SPAWN_RATE = 2000; // Initial bubble spawn rate in ms
 export const MIN_SPAWN_RATE = 500; // Minimum spawn rate (max difficulty)
