@@ -9,8 +9,8 @@ import "./App.css";
 
 const GAME_DURATION = 60;
 const INITIAL_SPAWN_RATE = 2000;
-const MIN_SPAWN_RATE = 500;
-const SPAWN_RATE_ACCELERATION = 50;
+const MIN_SPAWN_RATE = 400;
+const SPAWN_RATE_ACCELERATION = 10;
 
 const GAME_ITEMS = [
   { id: "salary", category: "income", emoji: "💰", label: "Salary" },
@@ -36,7 +36,7 @@ const createSound = (src) => {
     return new Howl({ src: [src], volume: 0.3 });
   } catch (error) {
     console.warn(`Could not load sound: ${src}`);
-    return { play: () => {} }; // Mock sound object
+    return { play: () => {} };
   }
 };
 
@@ -58,8 +58,15 @@ const useGameLogic = () => {
   const spawnRate = useRef(INITIAL_SPAWN_RATE);
   const bubbleIdCounter = useRef(0);
 
+  // **FIX: Use refs to avoid stale closure issues**
+  const gameStateRef = useRef("idle");
   const gameTimerRef = useRef(null);
   const bubbleSpawnerRef = useRef(null);
+
+  // Update ref whenever state changes
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   // Cleanup effect
   useEffect(() => {
@@ -69,9 +76,35 @@ const useGameLogic = () => {
     };
   }, []);
 
-  const startGame = useCallback(() => {
-    console.log("🚀 Starting game..."); // Debug
+  // **FIX: Remove gameState dependency and use ref instead**
+  const spawnBubble = useCallback(() => {
+    if (gameStateRef.current !== "playing") {
+      console.log("❌ Not spawning - game not playing, current state:", gameStateRef.current);
+      return;
+    }
 
+    const randomItem = GAME_ITEMS[Math.floor(Math.random() * GAME_ITEMS.length)];
+    const newBubble = { 
+      ...randomItem, 
+      id: `bubble-${++bubbleIdCounter.current}-${Date.now()}`
+    };
+    
+    console.log("✅ Spawned:", newBubble.label, newBubble.id);
+    setBubbles((prev) => {
+      const newBubbles = [...prev, newBubble];
+      console.log("📊 Total bubbles:", newBubbles.length);
+      return newBubbles;
+    });
+
+    spawnRate.current = Math.max(
+      MIN_SPAWN_RATE,
+      spawnRate.current - SPAWN_RATE_ACCELERATION
+    );
+  }, []); // **FIX: Empty dependency array**
+
+  const startGame = useCallback(() => {
+    console.log("🚀 Starting game...");
+    
     // Clear any existing timers
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
     if (bubbleSpawnerRef.current) clearTimeout(bubbleSpawnerRef.current);
@@ -95,22 +128,25 @@ const useGameLogic = () => {
       });
     }, 1000);
 
-    // Start spawning bubbles
+    // **FIX: Start spawning immediately and use ref for state checking**
     const spawnLoop = () => {
-      console.log("🫧 Spawning bubble..."); // Debug
+      console.log("🫧 Spawning bubble..., current game state:", gameStateRef.current);
       spawnBubble();
-      bubbleSpawnerRef.current = setTimeout(() => {
-        if (gameTimerRef.current) spawnLoop();
-      }, spawnRate.current);
+      if (gameStateRef.current === "playing") {
+        bubbleSpawnerRef.current = setTimeout(spawnLoop, spawnRate.current);
+      }
     };
-
-    // Initial spawn
-    setTimeout(spawnLoop, 500); // Small delay to ensure canvas is ready
-  }, []);
+    
+    // Start spawning after a small delay to ensure state is updated
+    setTimeout(() => {
+      console.log("🎮 Starting spawn loop, game state:", gameStateRef.current);
+      spawnLoop();
+    }, 100);
+  }, [spawnBubble]);
 
   useEffect(() => {
     if (timer <= 0 && gameState === "playing") {
-      console.log("⏰ Game over!"); // Debug
+      console.log("⏰ Game over!");
       setGameState("gameOver");
       sounds.gameOver.play();
       clearInterval(gameTimerRef.current);
@@ -119,34 +155,8 @@ const useGameLogic = () => {
     }
   }, [timer, gameState]);
 
-  const spawnBubble = useCallback(() => {
-    if (gameState !== "playing") {
-      console.log("❌ Not spawning - game not playing"); // Debug
-      return;
-    }
-
-    const randomItem =
-      GAME_ITEMS[Math.floor(Math.random() * GAME_ITEMS.length)];
-    const newBubble = {
-      ...randomItem,
-      id: `bubble-${++bubbleIdCounter.current}-${Date.now()}`,
-    };
-
-    console.log("✅ Spawned:", newBubble.label, newBubble.id); // Debug
-    setBubbles((prev) => {
-      const newBubbles = [...prev, newBubble];
-      console.log("📊 Total bubbles:", newBubbles.length); // Debug
-      return newBubbles;
-    });
-
-    spawnRate.current = Math.max(
-      MIN_SPAWN_RATE,
-      spawnRate.current - SPAWN_RATE_ACCELERATION
-    );
-  }, [gameState]);
-
   const handleDrop = useCallback((item, binType) => {
-    console.log(`🎯 Dropped ${item.label} in ${binType} bin`); // Debug
+    console.log(`🎯 Dropped ${item.label} in ${binType} bin`);
     setBubbles((prev) => prev.filter((b) => b.id !== item.id));
 
     if (item.category === binType) {
@@ -165,7 +175,7 @@ const useGameLogic = () => {
   }, []);
 
   const handleMiss = useCallback((item) => {
-    console.log(`💔 Missed: ${item.label}`); // Debug
+    console.log(`💔 Missed: ${item.label}`);
     setBubbles((prev) => prev.filter((b) => b.id !== item.id));
     setScore((prev) => ({
       ...prev,
@@ -198,14 +208,11 @@ function Bubble({
 }) {
   const [isDragging, setIsDragging] = useState(false);
 
-  // Simple fallback values
   const canvasWidth = canvasRef.current?.clientWidth || 800;
   const canvasHeight = canvasRef.current?.clientHeight || 600;
-  const fallDuration = 10; // Fixed duration for consistency
+  const fallDuration = 8; // Faster falling
 
-  console.log(
-    `🫧 Bubble ${item.label} created - Canvas: ${canvasWidth}x${canvasHeight}`
-  ); // Debug
+  console.log(`🫧 Bubble ${item.label} created - Canvas: ${canvasWidth}x${canvasHeight}`);
 
   const handleDragEnd = (event, info) => {
     setIsDragging(false);
@@ -252,12 +259,12 @@ function Bubble({
       dragMomentum={false}
       dragElastic={0.2}
       onDragStart={() => {
-        console.log(`🖱️ Started dragging ${item.label}`); // Debug
+        console.log(`🖱️ Started dragging ${item.label}`);
         setIsDragging(true);
       }}
       onDragEnd={handleDragEnd}
       onAnimationComplete={() => {
-        console.log(`⬇️ ${item.label} finished falling`); // Debug
+        console.log(`⬇️ ${item.label} finished falling`);
         if (!isDragging) {
           onMiss(item);
         }
@@ -266,22 +273,22 @@ function Bubble({
         y: -120,
         x: Math.random() * Math.max(0, canvasWidth - 80),
         opacity: 0,
-        scale: 0.5,
+        scale: 0.8
       }}
       animate={{
-        y: canvasHeight + 120, // Explicit target
+        y: canvasHeight + 120,
         opacity: 1,
-        scale: 1,
+        scale: 1
       }}
       exit={{
         opacity: 0,
         scale: 0.3,
-        transition: { duration: 0.3 },
+        transition: { duration: 0.3 }
       }}
       transition={{
         y: { duration: fallDuration, ease: "linear", type: "tween" },
         opacity: { duration: 0.5 },
-        scale: { duration: 0.5 },
+        scale: { duration: 0.5 }
       }}
       className={`absolute w-20 h-20 bg-white/95 rounded-full shadow-xl flex flex-col items-center justify-center cursor-grab border-3 ${
         item.category === "income" ? "border-green-500" : "border-red-500"
@@ -290,12 +297,10 @@ function Bubble({
       whileTap={{ scale: 1.3 }}
       style={{
         willChange: "transform",
-        backfaceVisibility: "hidden", // Performance optimization
+        backfaceVisibility: "hidden",
       }}
     >
-      <span className="text-2xl select-none pointer-events-none">
-        {item.emoji}
-      </span>
+      <span className="text-2xl select-none pointer-events-none">{item.emoji}</span>
       <span className="text-[9px] font-bold select-none pointer-events-none text-center leading-tight">
         {item.label}
       </span>
@@ -412,7 +417,7 @@ function App() {
         width: canvasRef.current.clientWidth,
         height: canvasRef.current.clientHeight,
         gameState,
-        bubblesCount: bubbles.length,
+        bubblesCount: bubbles.length
       });
     }
   }, [gameState, bubbles.length]);
@@ -424,17 +429,14 @@ function App() {
           💰 Financial Catch 💸
         </h1>
         <p className="text-white text-lg md:text-xl font-medium drop-shadow-md max-w-2xl">
-          Drag income items to the{" "}
-          <span className="text-green-300 font-bold">green bin</span> and
-          expenses to the{" "}
-          <span className="text-red-300 font-bold">red bin</span>!
+          Drag income items to the <span className="text-green-300 font-bold">green bin</span> and expenses to the <span className="text-red-300 font-bold">red bin</span>!
         </p>
       </div>
 
       <div
         ref={canvasRef}
         className="canvas h-[70vh] rounded-3xl w-[95vw] md:w-[85vw] max-w-5xl bg-gradient-to-b from-sky-300 to-sky-500 relative overflow-hidden border-4 border-white shadow-2xl"
-        style={{ minHeight: "400px" }} // Ensure minimum height
+        style={{ minHeight: '400px' }}
       >
         <AnimatePresence mode="popLayout">
           {gameState === "playing" &&
